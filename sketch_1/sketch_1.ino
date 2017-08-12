@@ -33,7 +33,7 @@ uint16_t brightness = 60;
 #else
 #define TIME_TO_MS  60000
 #endif
-const uint32_t timeArray[8] = {5*TIME_TO_MS, 10*TIME_TO_MS, 15*TIME_TO_MS, 20*TIME_TO_MS, 25*TIME_TO_MS, 30*TIME_TO_MS, 35*TIME_TO_MS, 40*TIME_TO_MS}; //in minutes * 
+const uint8_t timeArray[8] = {5, 10, 15, 20, 25, 30, 35, 40}; //in minutes * 
 
 void setup(void)
 {
@@ -87,16 +87,13 @@ void loop(void)
     
     // Loop that run while the LED are animated
     while(awake) {
-    
-
         if (!running){
             if (triggered) {
                 deltaTime = millis() - lastTriggered;
                 if (digitalRead(BTN_PIN) == HIGH) { // not down
                     if(prevWaslongCommand == false) {
                         /* Update animation duration */
-                        count++;
-                        if (count > 8) {
+                        if (++count > 8) {
                             count = 1;
                         }
                     } else {
@@ -151,17 +148,20 @@ void loop(void)
                     start = millis();
                     // TODO: start code for animation
                     
-                } else if (count == 0 && (millis() - start > 30000)) { // Config Timeout
-                    /* Timeout, go to sleep */
-                    awake = false;
-                    break;
                 }
             }
         } else {
             /* TODO led animation */
-            rainbowCycle();
+            switch(mode) {
+            case 1:
+                rainbowCycle();
+                break;
+            case 0:
+            default:
+                theaterChase();
+            }
             //delay(KEEP_RUNNING);
-            if (triggered || (millis() - start > timeArray[count - 1])) {
+            if (triggered || (millis() - start > timeArray[count - 1] * TIME_TO_MS)) {
               fadeOff(2500);
               awake = false;
             }
@@ -186,9 +186,9 @@ void showLedsCount(short count)
 
 void ledsRollAnimation() 
 {
-    colorWipe(ROSE, 100);
+    colorWipe(colorMode, 100);
     colorWipe(strip.Color(0, 0, 0), 75);
-    colorWipe(ROSE, 100);
+    colorWipe(colorMode, 100);
     fadeOff(500);
 }
 
@@ -231,6 +231,47 @@ uint32_t Wheel(byte WheelPos)
         WheelPos -= 170;
         return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
     }
+}
+
+void theaterChase() 
+{
+    uint8_t br = brightness;
+    uint8_t brWait = 1500 / br;
+    
+    for (int q=0; q < 3; q++) {
+        strip.setBrightness(brightness); // Reset brightness to default
+        for (int i=0; i < STRIPSIZE; i=i+3) { //TODO random pixel
+            strip.setPixelColor(i+q, ROSE);    //turn every third pixel on
+        }
+        // ON
+        for (int i=1; i <= brightness; i++) {
+            strip.setBrightness(i);
+            strip.show();
+            delay(brWait);
+            if (triggered) {
+                return;
+            }
+        }
+        delay(500);
+        if (triggered) {
+            return;
+        }
+        // OFF
+        for(short i=brightness; i>=0; i--){
+            strip.setBrightness(i);
+            strip.show();
+            delay(brWait);
+            if (triggered) {
+                return;
+            }
+        }
+        for (int i=0; i < STRIPSIZE; i=i+3) {
+            strip.setPixelColor(i+q, 0);        //turn every third pixel off
+        }
+    }
+        
+    strip.setBrightness(brightness);
+    strip.show();
 }
 
 /*
