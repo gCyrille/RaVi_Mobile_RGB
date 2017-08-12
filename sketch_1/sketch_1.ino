@@ -2,6 +2,8 @@
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
+//#define DEBUG
+
 #define BTN_PIN 0
 #define ONBOARDLED 1                      //LED on pin 1
 #define INTERRUPT_PIN 2
@@ -24,7 +26,14 @@ volatile boolean triggered = false;
 uint32_t colorMode = ROSE;
 uint8_t mode = 0; //0 = random rose, 1 = rainbow wave
 
-const byte brightness = 60;
+uint16_t brightness = 60;
+
+#ifdef DEBUG
+#define TIME_TO_MS  1000
+#else
+#define TIME_TO_MS  60000
+#endif
+const uint32_t timeArray[8] = {5*TIME_TO_MS, 10*TIME_TO_MS, 15*TIME_TO_MS, 20*TIME_TO_MS, 25*TIME_TO_MS, 30*TIME_TO_MS, 35*TIME_TO_MS, 40*TIME_TO_MS}; //in minutes * 
 
 void setup(void)
 {
@@ -93,19 +102,19 @@ void loop(void)
                     } else {
                         // Button is just released from a long press
                         prevWaslongCommand = false;
+                        /* Change animation style */
+                        switch(++mode) {
+                        case 1:
+                          colorMode = YELLOW;
+                          break;
+                        case 0:
+                        default:
+                            mode = 0;
+                            colorMode = ROSE;
+                        }
                     }
                     triggered = false;
                 } else if (deltaTime > 1000) { // If still down, long press
-                    /* Change animation style */
-                    switch(++mode) {
-                    case 1:
-                      colorMode = YELLOW;
-                      break;
-                    case 0:
-                    default:
-                        mode = 0;
-                        colorMode = ROSE;
-                    }
                     prevWaslongCommand = true;
                     triggered = false;
                 }
@@ -113,34 +122,49 @@ void loop(void)
                 lastCommand = millis();
             }
             
-            showLedsCount(count);
-            
-            if (count > 0 && (millis() - lastCommand > 2000)) {
-                /* Start animation */
-                running = true;
-
-                fadeOff(500);
-                // TODO: start code for animation
-                
-            } else if (count == 0 && (millis() - start > 30000)) { // Config Timeout
-                /* Timeout, go to sleep */
-                awake = false;
-                break;
-            }
-        } else {
-           if (triggered) {
+            if (prevWaslongCommand) {
                 deltaTime = millis() - lastTriggered;
-                if (digitalRead(BTN_PIN) == HIGH) { // not down
+                if (deltaTime > 3000) { // Very long press
+                    /* Enter in loop to change brightness */
                     triggered = false;
-                    /* Cancel animation and go to sleep */
+                    while (!triggered) {
+                        if(++brightness > 255) {
+                            brightness = 10;
+                        }
+                        strip.setBrightness(brightness);
+                        strip.show();
+                        delay(30);
+                    }
+                    triggered = false;
+                    prevWaslongCommand = false;
+                } 
+                lastCommand = millis();
+            } else {
+              
+                showLedsCount(count);
+                
+                if (count > 0 && (millis() - lastCommand > 2000)) {
+                    /* Start animation */
+                    running = true;
+    
+                    fadeOff(1000);
+                    start = millis();
+                    // TODO: start code for animation
+                    
+                } else if (count == 0 && (millis() - start > 30000)) { // Config Timeout
+                    /* Timeout, go to sleep */
                     awake = false;
                     break;
                 }
-                delay(80); // debounce
             }
+        } else {
             /* TODO led animation */
-            delay(KEEP_RUNNING);
-            awake = false;
+            rainbowCycle();
+            //delay(KEEP_RUNNING);
+            if (triggered || (millis() - start > timeArray[count - 1])) {
+              fadeOff(2500);
+              awake = false;
+            }
         }
     }
 }
@@ -157,7 +181,6 @@ void showLedsCount(short count)
         else
             strip.setPixelColor(i, 0);
     }
-  
     strip.show();
 }
 
@@ -166,24 +189,56 @@ void ledsRollAnimation()
     colorWipe(ROSE, 100);
     colorWipe(strip.Color(0, 0, 0), 75);
     colorWipe(ROSE, 100);
-    fadeOff(1000);
+    fadeOff(500);
 }
 
 // Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) {
+void colorWipe(uint32_t c, uint8_t wait) 
+{
   for(uint8_t i=0; i<STRIPSIZE; i++) {
       strip.setPixelColor(i, c);
       strip.show();
       delay(wait);
   }
 }
+// Slightly different, this makes the rainbow equally distributed throughout
+void rainbowCycle() 
+{
+    uint16_t i, j;
+  
+    for(j=0; j<256; j++) { // 1 cycle of all color per led
+        for(i=0; i< STRIPSIZE; i++) {
+            strip.setPixelColor(i, Wheel(((i * 256 / (STRIPSIZE * 2)) + j) & 255));// (led pos * nb step / 'color with') + offset
+        }
+        strip.show();
+        delay(100);
+        if (triggered) {
+            return;
+        }
+    }
+}
+
+// Input a value 0 to 255 to get a color value.
+// The colours are a transition r - g - b - back to r.
+uint32_t Wheel(byte WheelPos) 
+{
+    if(WheelPos < 85) {
+        return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+    } else if(WheelPos < 170) {
+        WheelPos -= 85;
+        return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+    } else {
+        WheelPos -= 170;
+        return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+    }
+}
 
 /*
  * Duration of the fade in ms
  */
-void fadeOff(uint8_t duration)
+void fadeOff(uint16_t duration)
 {
-    uint8_t wait = duration / brightness;
+    uint16_t wait = duration / brightness;
     for(short i=brightness; i>=0; i--){
         strip.setBrightness(i);
         strip.show();
@@ -205,12 +260,14 @@ void fastBlink()
 
 void blink(int d, int n)
 {
+#ifdef DEBUG
   for (uint8_t i=0; i<n; i++) {     //wake up, flash the LED
         digitalWrite(ONBOARDLED, HIGH);
         delay(d);
         digitalWrite(ONBOARDLED, LOW);
         delay(d);
     }
+#endif
 }
 
 
