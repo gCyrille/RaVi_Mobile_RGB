@@ -1,16 +1,30 @@
-
+#include <Adafruit_NeoPixel.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-#define ONBOARDLED 1                      //LED on pin 1
 #define BTN_PIN 0
+#define ONBOARDLED 1                      //LED on pin 1
 #define INTERRUPT_PIN 2
+#define LEDS_PIN 3
+#define STRIPSIZE 8 // Limited by max 256 bytes ram. At 3 bytes/LED you get max ~85 pixels
+
 #define KEEP_RUNNING 2000         //milliseconds
 #define BODS 7                     //BOD Sleep bit in MCUCR
 #define BODSE 2                    //BOD Sleep enable bit in MCUCR
 
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPSIZE, LEDS_PIN, NEO_GRB + NEO_KHZ800);
+
 volatile unsigned long lastTriggered = 0;
 volatile boolean triggered = false;
+
+#define ROSE   0xFF00C5
+#define YELLOW 0xFFFB00
+
+#define NB_MODE 2
+uint32_t colorMode = ROSE;
+uint8_t mode = 0; //0 = random rose, 1 = rainbow wave
+
+const byte brightness = 60;
 
 void setup(void)
 {
@@ -18,7 +32,7 @@ void setup(void)
     //or sink any current. input pins must have a defined level; a good way to
     //ensure this is to enable the internal pullup resistors.
 
-    for (byte i=0; i<5; i++) {     //make all pins inputs with pullups enabled
+    for (uint8_t i=0; i<5; i++) {     //make all pins inputs with pullups enabled
         pinMode(i, INPUT);
         digitalWrite(i, HIGH);
     }
@@ -29,6 +43,9 @@ void setup(void)
     pinMode(INTERRUPT_PIN, INPUT_PULLUP);
     pinMode(BTN_PIN, INPUT_PULLUP);
     
+    strip.begin();
+    fadeOff(200);
+  
     blink(300, 3);
 }
 
@@ -36,18 +53,19 @@ void loop(void)
 {
     goToSleep();
 
+    strip.setBrightness(brightness);
+    strip.show();
+    
     ledsRollAnimation(); // Wake up signal
     
-    short count = 0;
+    uint8_t count = 0;
     
     boolean awake = true;
     boolean running = false;
     unsigned long lastCommand = 0;
     unsigned long deltaTime = 0;
     unsigned long start = millis();
-
-    //delay(500); // Waiting for command from interrupt
-        
+    
     GIFR  |= _BV(PCIF);    // clear any outstanding interrupts
     GIMSK |= _BV(PCIE); // Turn on Pin Change interrupt
     PCMSK |= _BV(PCINT0); // Which pins are affected by the interrupt
@@ -59,17 +77,33 @@ void loop(void)
             deltaTime = millis() - lastTriggered;
             if (digitalRead(BTN_PIN) == HIGH) { // not down
                 triggered = false;
-                if (running) { // cancel animation and go to sleep
+                if (running) {
+                    /* Cancel animation and go to sleep */
                     awake = false;
                     break;
                 } else {
+                    /* Update animation duration */
                     count++;
+                    if (count > 8) {
+                      count = 1;
+                    }
+                    showLedsCount(count);
                 }
             } else if (deltaTime > 1500) { // If still down, long press
-                    changeLedsMode();
-                    triggered = false;
+                /* Change animation style */
+                switch(++mode) {
+                case 1:
+                  colorMode = YELLOW;
+                  break;
+                case 0:
+                default:
+                    mode = 0;
+                    colorMode = ROSE;
+                }
+                showLedsCount(count);
+                triggered = false;
             }
-            delay(50); // debounce
+            delay(80); // debounce
             lastCommand = millis();
         }
 
@@ -77,9 +111,10 @@ void loop(void)
         if (!running){
             if (count > 0 && (millis() - lastCommand > 2000)) {
                 running = true;
-            
+
+                fadeOff(500);
                 // Blink to show the time
-                blink(500, count);
+                //blink(500, count);
                 
             } else if (count == 0 && (millis() - start > 30000)) { // Config Timeout
                 awake = false;
@@ -99,19 +134,49 @@ void loop(void)
  * Leds methods below
  */
 
-void showLedsCount(short c)
+void showLedsCount(short count)
 {
-    blink(c * 10, 1);
-}
-
-void changeLedsMode()
-{
-    blink(700, 1);
+    for(uint8_t i=0; i<STRIPSIZE; i++) {
+        if (i < count)
+            strip.setPixelColor(i, colorMode);
+        else
+            strip.setPixelColor(i, 0);
+    }
+  
+    strip.show();
 }
 
 void ledsRollAnimation() 
 {
-    fastBlink();
+    colorWipe(ROSE, 100);
+    colorWipe(strip.Color(0, 0, 0), 75);
+    colorWipe(ROSE, 100);
+    fadeOff(1000);
+}
+
+// Fill the dots one after the other with a color
+void colorWipe(uint32_t c, uint8_t wait) {
+  for(uint8_t i=0; i<STRIPSIZE; i++) {
+      strip.setPixelColor(i, c);
+      strip.show();
+      delay(wait);
+  }
+}
+
+/*
+ * Duration of the fade in ms
+ */
+void fadeOff(uint8_t duration)
+{
+    uint8_t wait = duration / brightness;
+    for(short i=brightness; i>=0; i--){
+        strip.setBrightness(i);
+        strip.show();
+        delay(wait);
+    }
+    strip.clear();
+    strip.setBrightness(brightness); // Reset brightness to default
+    strip.show();
 }
 
 /**
@@ -125,7 +190,7 @@ void fastBlink()
 
 void blink(int d, int n)
 {
-  for (byte i=0; i<n; i++) {     //wake up, flash the LED
+  for (uint8_t i=0; i<n; i++) {     //wake up, flash the LED
         digitalWrite(ONBOARDLED, HIGH);
         delay(d);
         digitalWrite(ONBOARDLED, LOW);
@@ -137,6 +202,11 @@ void blink(int d, int n)
 void goToSleep(void)
 {
     fastBlink();
+
+    strip.clear(); // Initialize all pixels to 'off'
+    strip.setBrightness(0);
+    strip.show(); // Update
+
     byte adcsra, mcucr1, mcucr2;
 
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
