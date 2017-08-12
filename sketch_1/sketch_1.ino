@@ -44,8 +44,9 @@ void setup(void)
     pinMode(BTN_PIN, INPUT_PULLUP);
     
     strip.begin();
-    fadeOff(200);
-  
+    strip.clear();
+    strip.show();
+    
     blink(300, 3);
 }
 
@@ -58,13 +59,18 @@ void loop(void)
     
     ledsRollAnimation(); // Wake up signal
     
-    uint8_t count = 0;
+    uint8_t count = 1;
     
     boolean awake = true;
     boolean running = false;
     unsigned long lastCommand = 0;
     unsigned long deltaTime = 0;
     unsigned long start = millis();
+    bool prevWaslongCommand = false;
+    
+    lastCommand = start;
+    lastTriggered = start;
+    triggered = false;
     
     GIFR  |= _BV(PCIF);    // clear any outstanding interrupts
     GIMSK |= _BV(PCIE); // Turn on Pin Change interrupt
@@ -73,60 +79,69 @@ void loop(void)
     // Loop that run while the LED are animated
     while(awake) {
     
-        if (triggered) {
-            deltaTime = millis() - lastTriggered;
-            if (digitalRead(BTN_PIN) == HIGH) { // not down
-                triggered = false;
-                if (running) {
-                    /* Cancel animation and go to sleep */
-                    awake = false;
-                    break;
-                } else {
-                    /* Update animation duration */
-                    count++;
-                    if (count > 8) {
-                      count = 1;
-                    }
-                    showLedsCount(count);
-                }
-            } else if (deltaTime > 1500) { // If still down, long press
-                /* Change animation style */
-                switch(++mode) {
-                case 1:
-                  colorMode = YELLOW;
-                  break;
-                case 0:
-                default:
-                    mode = 0;
-                    colorMode = ROSE;
-                }
-                showLedsCount(count);
-                triggered = false;
-            }
-            delay(80); // debounce
-            lastCommand = millis();
-        }
 
-        // Timeout to run LED
         if (!running){
+            if (triggered) {
+                deltaTime = millis() - lastTriggered;
+                if (digitalRead(BTN_PIN) == HIGH) { // not down
+                    if(prevWaslongCommand == false) {
+                        /* Update animation duration */
+                        count++;
+                        if (count > 8) {
+                            count = 1;
+                        }
+                    } else {
+                        // Button is just released from a long press
+                        prevWaslongCommand = false;
+                    }
+                    triggered = false;
+                } else if (deltaTime > 1000) { // If still down, long press
+                    /* Change animation style */
+                    switch(++mode) {
+                    case 1:
+                      colorMode = YELLOW;
+                      break;
+                    case 0:
+                    default:
+                        mode = 0;
+                        colorMode = ROSE;
+                    }
+                    prevWaslongCommand = true;
+                    triggered = false;
+                }
+                delay(80); // debounce
+                lastCommand = millis();
+            }
+            
+            showLedsCount(count);
+            
             if (count > 0 && (millis() - lastCommand > 2000)) {
+                /* Start animation */
                 running = true;
 
                 fadeOff(500);
-                // Blink to show the time
-                //blink(500, count);
+                // TODO: start code for animation
                 
             } else if (count == 0 && (millis() - start > 30000)) { // Config Timeout
+                /* Timeout, go to sleep */
                 awake = false;
                 break;
             }
         } else {
-            // Do led animation
+           if (triggered) {
+                deltaTime = millis() - lastTriggered;
+                if (digitalRead(BTN_PIN) == HIGH) { // not down
+                    triggered = false;
+                    /* Cancel animation and go to sleep */
+                    awake = false;
+                    break;
+                }
+                delay(80); // debounce
+            }
+            /* TODO led animation */
             delay(KEEP_RUNNING);
             awake = false;
         }
-        
-        //delay(KEEP_RUNNING);           //opportunity to measure active supply current 
     }
 }
 
