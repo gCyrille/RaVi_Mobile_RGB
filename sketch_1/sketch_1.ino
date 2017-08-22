@@ -233,9 +233,14 @@ uint32_t Wheel(byte WheelPos)
     }
 }
 
+#define NB_STEPS   50
+#define MAX_DELAY 100
+#define A_FACT    MAX_DELAY/NB_STEPS
+
 void theaterChase() 
 {
     uint8_t br = brightness;
+    const uint8_t brSteps = brightness / NB_STEPS;
     uint8_t brWait = 1500 / br;
     
     for (int q=0; q < 3; q++) {
@@ -244,26 +249,30 @@ void theaterChase()
             strip.setPixelColor(i+q, ROSE);    //turn every third pixel on
         }
         // ON
-        for (int i=1; i <= brightness; i++) {
-            strip.setBrightness(i);
+        br = 1;
+        for (int i=0; i < NB_STEPS; i++) {
+            strip.setBrightness(br);
             strip.show();
-            delay(brWait);
+            delay(i * A_FACT);
             if (triggered) {
                 return;
             }
+            br += brSteps;
         }
-        delay(500);
+        strip.setBrightness(br);
+        strip.show();
+        delay(MAX_DELAY);
         if (triggered) {
             return;
         }
-        // OFF
-        for(short i=brightness; i>=0; i--){
-            strip.setBrightness(i);
+        for (int i=NB_STEPS-1; i >= 0; i--) {
+            strip.setBrightness(br);
             strip.show();
-            delay(brWait);
+            delay(i * A_FACT);
             if (triggered) {
                 return;
             }
+            br -= brSteps;
         }
         for (int i=0; i < STRIPSIZE; i=i+3) {
             strip.setPixelColor(i+q, 0);        //turn every third pixel off
