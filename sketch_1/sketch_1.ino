@@ -51,6 +51,7 @@ void setup(void)
     
     pinMode(INTERRUPT_PIN, INPUT_PULLUP);
     pinMode(BTN_PIN, INPUT_PULLUP);
+    randomSeed(analogRead(5));
     
     strip.begin();
     strip.clear();
@@ -233,37 +234,49 @@ uint32_t Wheel(byte WheelPos)
     }
 }
 
+#define NB_LEDS_CHASE 4
 void theaterChase() 
 {
-    uint8_t br = brightness;
+    uint8_t br = 1;
     const uint8_t brSteps = brightness / 50;
-    
-    for (int q=0; q < 3; q++) {
-        for (int i=0; i < STRIPSIZE; i=i+3) { //TODO random pixel
-            strip.setPixelColor(i+q, ROSE);    //turn every third pixel on
+
+    //Select pixels
+    uint8_t leds[NB_LEDS_CHASE] = {-1};
+    boolean nused = true;
+    uint8_t i = 0;
+    while(i < NB_LEDS_CHASE) {
+        uint8_t d = random(STRIPSIZE);//select a random led
+
+        // Do not select twice the same led
+        nused =  (d != leds[0]);
+        for (uint8_t j=1; j<NB_LEDS_CHASE; j++) {
+            nused = (nused && d != leds[j]);
         }
-        
-        br = brSteps;
-        for(int i=-25; i <= 24; i++) {
-            strip.setBrightness(br);
-            strip.show();
-            delay(-(i * i)/10 + 80);
-            if (triggered) {
-                return;
-            }
-            if (i <= 0) {
-                br += brSteps;
-            } else {
-                br -= brSteps;
-            }
-        }
-        
-        // ON
-        for (int i=0; i < STRIPSIZE; i=i+3) {
-            strip.setPixelColor(i+q, 0);        //turn every third pixel off
+        if (nused) {
+            strip.setPixelColor(d, ROSE); //set on the led
+            leds[i] = d;
+            i++;
         }
     }
-        
+    //Animation
+    for(int i=-25; i <= 24; i++) {
+        strip.setBrightness(br);
+        strip.show();
+        delay(-(i * i)/10 + 80);
+        if (triggered) {
+            return;
+        }
+        if (i <= 0) {
+            br += brSteps;
+        } else {
+            br -= brSteps;
+        }
+    }
+    
+    // OFF
+    for (int i=0; i < STRIPSIZE; i++) {
+        strip.setPixelColor(i, 0);        //turn every third pixel off
+    }
     strip.setBrightness(brightness);
     strip.show();
 }
