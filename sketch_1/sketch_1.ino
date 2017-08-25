@@ -241,20 +241,16 @@ void theaterChase()
     uint8_t br = brSteps;
 
     //Select pixels
-    uint8_t leds[NB_LEDS_CHASE] = {-1};
-    boolean nused = true;
+    uint8_t used = 0;
     uint8_t i = 0;
     while(i < NB_LEDS_CHASE) {
         uint8_t d = random(STRIPSIZE);//select a random led
+        uint8_t flag = 1 << d;
 
         // Do not select twice the same led
-        nused =  (d != leds[0]);
-        for (uint8_t j=1; j<NB_LEDS_CHASE; j++) {
-            nused = (nused && d != leds[j]);
-        }
-        if (nused) {
+        if ((used & flag) == 0) {
+            used |= flag;
             strip.setPixelColor(d, ROSE); //set on the led
-            leds[i] = d;
             i++;
         }
     }
@@ -266,7 +262,7 @@ void theaterChase()
         if (triggered) {
             return;
         }
-        if (i <= 0) {
+        if (i < 0) {
             br += brSteps;
         } else {
             br -= brSteps;
