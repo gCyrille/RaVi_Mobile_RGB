@@ -237,8 +237,8 @@ uint32_t Wheel(byte WheelPos)
 #define NB_LEDS_CHASE 4
 void theaterChase() 
 {
-    uint8_t br = 1;
     const uint8_t brSteps = brightness / 50;
+    uint8_t br = brSteps;
 
     //Select pixels
     uint8_t leds[NB_LEDS_CHASE] = {-1};
@@ -262,7 +262,7 @@ void theaterChase()
     for(int i=-25; i <= 24; i++) {
         strip.setBrightness(br);
         strip.show();
-        delay(-(i * i)/10 + 80);
+        delay((i*i*i-i*i-600*i+6000)/70);
         if (triggered) {
             return;
         }
