@@ -26,7 +26,7 @@ volatile boolean triggered = false;
 uint32_t colorMode = ROSE;
 uint8_t mode = 0; //0 = random rose, 1 = rainbow wave
 
-uint16_t brightness = 60;
+uint16_t brightness = 45;
 
 #ifdef DEBUG
 #define TIME_TO_MS  1000
@@ -237,8 +237,9 @@ uint32_t Wheel(byte WheelPos)
 #define NB_LEDS_CHASE 4
 void theaterChase() 
 {
-    const uint8_t brSteps = brightness / 50;
-    uint8_t br = brSteps;
+    const uint8_t brSteps = brightness / 58 +1;
+    uint8_t br = 1;
+    strip.setBrightness(br);
 
     //Select pixels
     uint8_t used = 0;
@@ -255,20 +256,24 @@ void theaterChase()
         }
     }
     //Animation
-    for(int i=-25; i <= 24; i++) {
+    for(int i=14; i >= -14; i--) {
         strip.setBrightness(br);
         strip.show();
         delay((i*i*i-i*i-600*i+6000)/70);
         if (triggered) {
             return;
         }
-        if (i < 0) {
-            br += brSteps;
-        } else {
-            br -= brSteps;
-        }
+        br += brSteps;
     }
-    
+    for(int i=-14; i <= 14; i++) {
+        strip.setBrightness(br);
+        strip.show();
+        delay((i*i*i-i*i-600*i+6000)/60);
+        if (triggered) {
+            return;
+        }
+        br -= brSteps;
+    }
     // OFF
     for (int i=0; i < STRIPSIZE; i++) {
         strip.setPixelColor(i, 0);        //turn every third pixel off
